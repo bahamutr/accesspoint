@@ -61,18 +61,14 @@ jobs:
           --transform-object-keys false \
           --unicode-escape-sequence false
 
+      - name: Check for changes
+        id: check-changes
+        run: echo "changes_exist=$(git status --porcelain | wc -l | xargs)" >> $GITHUB_OUTPUT
+
       - name: Commit changes
-        if: "! -z $(git status --porcelain)"
+        if: ${{ steps.check-changes.outputs.changes_exist > 0 }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: main
           commit_message: ':arrow_up: update latest bpb panel'
           commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
-
-      # - name: Notify on failure (需配置 Telegram secrets)
-      #   if: ${{ failure() }}
-      #   uses: actions/telegram@v1
-      #   with:
-      #     token: ${{ secrets.TELEGRAM_TOKEN }}
-      #     chat_id: ${{ secrets.CHAT_ID }}
-      #     message: "🚨 BPB Panel 构建失败！请检查日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
