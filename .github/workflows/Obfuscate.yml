@@ -5,8 +5,7 @@ on:
     branches:
       - main
   schedule:
-        # Runs everyday at 1:00 AM
-        - cron: "0 1 * * *"
+    - cron: "0 1 * * *"
 
 permissions:
   contents: write
@@ -19,39 +18,61 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v4
 
+      - name: Cache Node.js modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "latest"
+          node-version: "18.x"
 
-      - name: Install dependencies
-        run: |
-          npm install -g javascript-obfuscator
+      - name: Install javascript-obfuscator
+        run: npm install -g javascript-obfuscator@4.0.0
 
-      - name: Clone BPB workjs
+      - name: Download unobfuscated worker script
         run: |
-          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js
+          echo "⬇️ Downloading BPB worker script..."
+          wget -q --retry-connrefused --tries=3 -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js
+
+      - name: Verify downloaded file
+        run: |
+          if [ ! -f origin.js ]; then
+            echo "❌ Failed to download origin.js"
+            exit 1
+          fi
 
       - name: Obfuscate BPB worker js
         run: |
           javascript-obfuscator origin.js --output _worker.js \
           --compact true \
           --control-flow-flattening true \
-          --control-flow-flattening-threshold 1 \
-          --dead-code-injection true \
-          --dead-code-injection-threshold 1 \
+          --control-flow-flattening-threshold 0.3 \
+          --dead-code-injection false \
           --identifier-names-generator hexadecimal \
           --rename-globals true \
           --string-array true \
-          --string-array-encoding 'rc4' \
-          --string-array-threshold 1 \
-          --transform-object-keys true \
-          --unicode-escape-sequence true
+          --string-array-encoding base64 \
+          --string-array-threshold 0.5 \
+          --transform-object-keys false \
+          --unicode-escape-sequence false
 
       - name: Commit changes
+        if: "! -z $(git status --porcelain)"
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: main
           commit_message: ':arrow_up: update latest bpb panel'
           commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
-          push_options: '--set-upstream'
+
+      # - name: Notify on failure (需配置 Telegram secrets)
+      #   if: ${{ failure() }}
+      #   uses: actions/telegram@v1
+      #   with:
+      #     token: ${{ secrets.TELEGRAM_TOKEN }}
+      #     chat_id: ${{ secrets.CHAT_ID }}
+      #     message: "🚨 BPB Panel 构建失败！请检查日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
